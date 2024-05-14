@@ -14,6 +14,15 @@ from ast import literal_eval
 from six.moves import cPickle
 from datasets.referit3d.vocabulary import build_vocab, Vocabulary
 
+def pickle_data(file_name, *args):
+    """
+    Using (c)Pickle to save multiple python objects in a single file.
+    """
+    out_file = open(file_name, 'wb')
+    cPickle.dump(len(args), out_file, protocol=2)
+    for item in args:
+        cPickle.dump(item, out_file, protocol=2)
+    out_file.close()
 
 def unpickle_data(file_name, python2_to_3=False):
     """
