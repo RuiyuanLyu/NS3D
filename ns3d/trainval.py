@@ -285,7 +285,7 @@ def train_epoch(epoch, trainer, train_dataloader, meters, all_scans_in_dict):
     with tqdm_pbar(total=nr_iters) as pbar:
         for i in range(nr_iters):
             feed_dict = next(train_iter)
-            
+            import pdb; pdb.set_trace()
             feed_dict['input_str'] = feed_dict['utterance']
             tokenized = []
             for u in feed_dict['utterance']:
