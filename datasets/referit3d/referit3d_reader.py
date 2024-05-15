@@ -247,6 +247,64 @@ def compute_auxiliary_data(referit_data, all_scans, args):
           ' is: {:.2f}'.format(prc, obj_cnt))
     return mean_rgb, vocab
 
+import os
+import torch
+def read_scan_gt_pcd_color(scan_id, processed_scan_dir):
+    """
+        returns pcd_data and obj_pcds
+    """
+    pcd_data_path = os.path.join(processed_scan_dir, 'pcd_with_global_alignment', f'{scan_id}.pth')
+    if not os.path.exists(pcd_data_path):
+        print(f"Error: {pcd_data_path} does not exist.")
+        return None
+    data = torch.load(pcd_data_path)
+    pc, colors, label, instance_ids = data
+    return colors
+
+def compute_mean_rgb(scan_ids, processed_scan_dir):
+    color_sum = np.zeros((1, 3), dtype=np.float32)
+    n_points = 0
+    for scan_id in scan_ids:
+        pcd_data = read_scan_gt_pcd_color(scan_id, processed_scan_dir)
+        if pcd_data is None:
+            continue
+        color_sum += np.sum(pcd_data[:, 3:], axis=0)
+        n_points += len(pcd_data)
+    mean_rgb = color_sum / n_points
+    return mean_rgb
+
+import json
+def compute_es_auxiliary_data(args,
+        es_info_file="/mnt/petrelfs/lvruiyuan/embodiedscan_infos/embodiedscan_infos_train_full.pkl",
+        vg_raw_data_file="/mnt/petrelfs/lvruiyuan/repos/vil3dref/datasets/VG.json",
+        processed_scan_dir="/mnt/petrelfs/lvruiyuan/repos/vil3dref/datasets/referit3d/scan_data_new"
+        ):
+
+    """Given a train-split compute useful quantities like mean-rgb, a word-vocabulary.
+    :param referit_data: pandas Dataframe, as returned from load_referential_data()
+    :param all_scans:
+    :param args:
+    :return:
+    """
+    # Vocabulary
+    if args.vocab_file:
+        vocab = Vocabulary.load(args.vocab_file)
+        print(('Using external, provided vocabulary with {} words.'.format(len(vocab))))
+    else:
+        vg_raw_data = json.load(open(vg_raw_data_file, 'r'))
+        train_tokens = []
+        for x in vg_raw_data:
+            train_tokens.extend([x['text']])
+        vocab = build_vocab([x for x in train_tokens], args.min_word_freq)
+        print(('Length of vocabulary, with min_word_freq={} is {}'.format(args.min_word_freq, len(vocab))))
+
+    # Mean RGB for the training
+    data_list = np.load(es_info_file, allow_pickle=True)["data_list"]
+    training_scan_ids = [x["images"][0]["img_path"].split("/")[-2] for x in data_list]
+    print('{} training scans will be used.'.format(len(training_scan_ids)))
+    mean_rgb = compute_mean_rgb(training_scan_ids, processed_scan_dir)
+    print('Mean RGB for the training data is: {}'.format(mean_rgb))
+    return mean_rgb, vocab
 
 def trim_scans_per_referit3d_data(referit_data, scans):
     # remove scans not in referit_data

@@ -212,14 +212,13 @@ def main():
     
     from datasets.referit3d.definition import ReferIt3DDatasetSplit
     from datasets.referit3d.arguments import parse_arguments
-    from datasets.referit3d.eslistening_dataset import make_data_loaders
+    from datasets.referit3d.listening_dataset import make_data_loaders
     referit3d_args = parse_arguments(['-scannet-file', args.scannet_file, '-referit3D-file', args.referit3D_file, '--max-distractors', '9', '--max-test-objects', '88', '--batch-size', '16', '--n-workers', '2'])
-    # all_scans_in_dict, scans_split, class_to_idx = load_scan_related_data(referit3d_args.scannet_file)
-    # referit_data = load_referential_data(referit3d_args, referit3d_args.referit3D_file, scans_split)
-    # all_scans_in_dict = trim_scans_per_referit3d_data(referit_data, all_scans_in_dict)
+    all_scans_in_dict, scans_split, class_to_idx = load_scan_related_data(referit3d_args.scannet_file)
+    referit_data = load_referential_data(referit3d_args, referit3d_args.referit3D_file, scans_split)
+    all_scans_in_dict = trim_scans_per_referit3d_data(referit_data, all_scans_in_dict)
     mean_rgb, vocab = compute_auxiliary_data(referit_data, all_scans_in_dict, referit3d_args)
-    # data_loaders = make_data_loaders(referit3d_args, referit_data, vocab, class_to_idx, all_scans_in_dict, mean_rgb)
-    data_loaders = make_data_loaders(referit3d_args, vocab, mean_rgb)
+    data_loaders = make_data_loaders(referit3d_args, referit_data, vocab, class_to_idx, all_scans_in_dict, mean_rgb)
     train_dataloader = data_loaders['train']
     validation_dataloader = data_loaders['test']
 
