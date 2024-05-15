@@ -91,6 +91,8 @@ def mean_color(scan_ids, all_scans):
     mean_rgb = np.zeros((1, 3), dtype=np.float32)
     n_points = 0
     for scan_id in scan_ids:
+        if not scan_id in all_scans:
+            continue
         color = all_scans[scan_id].color
         mean_rgb += np.sum(color, axis=0)
         n_points += len(color)
@@ -255,7 +257,7 @@ def read_scan_gt_pcd_color(scan_id, processed_scan_dir):
     """
     pcd_data_path = os.path.join(processed_scan_dir, 'pcd_with_global_alignment', f'{scan_id}.pth')
     if not os.path.exists(pcd_data_path):
-        print(f"Error: {pcd_data_path} does not exist.")
+        # print(f"Error: {pcd_data_path} does not exist.")
         return None
     data = torch.load(pcd_data_path)
     pc, colors, label, instance_ids = data
@@ -265,11 +267,11 @@ def compute_mean_rgb(scan_ids, processed_scan_dir):
     color_sum = np.zeros((1, 3), dtype=np.float32)
     n_points = 0
     for scan_id in scan_ids:
-        pcd_data = read_scan_gt_pcd_color(scan_id, processed_scan_dir)
-        if pcd_data is None:
+        colors = read_scan_gt_pcd_color(scan_id, processed_scan_dir)
+        if colors is None:
             continue
-        color_sum += np.sum(pcd_data[:, 3:], axis=0)
-        n_points += len(pcd_data)
+        color_sum += np.sum(colors, axis=0)
+        n_points += len(colors)
     mean_rgb = color_sum / n_points
     return mean_rgb
 

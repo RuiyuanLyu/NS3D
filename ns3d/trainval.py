@@ -121,7 +121,7 @@ def main():
         logger.critical('Writing logs to file: "{}".'.format(args.log_file))
         import jacinle
         jacinle.set_logger_output_file(args.log_file)
-        jacinle.git_guard()
+        # jacinle.git_guard()
 
         logger.critical('Writing metainfo to file: "{}".'.format(args.meta_file))
         with open(args.meta_file, 'w') as f:
@@ -217,8 +217,8 @@ def main():
     # all_scans_in_dict, scans_split, class_to_idx = load_scan_related_data(referit3d_args.scannet_file)
     # referit_data = load_referential_data(referit3d_args, referit3d_args.referit3D_file, scans_split)
     # all_scans_in_dict = trim_scans_per_referit3d_data(referit_data, all_scans_in_dict)
-    mean_rgb, vocab = compute_auxiliary_data(referit_data, all_scans_in_dict, referit3d_args)
-    # data_loaders = make_data_loaders(referit3d_args, referit_data, vocab, class_to_idx, all_scans_in_dict, mean_rgb)
+    # mean_rgb, vocab = compute_auxiliary_data(referit_data, all_scans_in_dict, referit3d_args)
+    mean_rgb, vocab = compute_es_auxiliary_data(referit3d_args)
     data_loaders = make_data_loaders(referit3d_args, vocab, mean_rgb)
     train_dataloader = data_loaders['train']
     validation_dataloader = data_loaders['test']
@@ -232,7 +232,7 @@ def main():
         epoch = 0
 
         model.eval()
-        validate_epoch(epoch, trainer, validation_dataloader, meters, all_scans_in_dict)
+        validate_epoch(epoch, trainer, validation_dataloader, meters)
 
         if not args.debug:
             meters.dump(args.meter_file)
@@ -244,12 +244,12 @@ def main():
         meters.reset()
 
         model.train()
-        train_epoch(epoch, trainer, train_dataloader, meters, all_scans_in_dict)
+        train_epoch(epoch, trainer, train_dataloader, meters)
 
         if args.validation_interval > 0 and epoch % args.validation_interval == 0:
             model.eval()
             with torch.no_grad():
-                validate_epoch(epoch, trainer, validation_dataloader, meters, all_scans_in_dict)
+                validate_epoch(epoch, trainer, validation_dataloader, meters)
 
         if not args.debug:
             meters.dump(args.meter_file)
@@ -271,7 +271,7 @@ def main():
                 trainer.save_checkpoint(fname, dict(epoch=epoch, meta_file=args.meta_file))
 
 
-def train_epoch(epoch, trainer, train_dataloader, meters, all_scans_in_dict):
+def train_epoch(epoch, trainer, train_dataloader, meters):
     nr_iters = args.iters_per_epoch
     if nr_iters == 0:
         nr_iters = len(train_dataloader)
@@ -372,7 +372,7 @@ def decode_stimulus_string(s):
 
         return scene_id, instance_label, n_objects, target_id, distractors_ids   
     
-def validate_epoch(epoch, trainer, val_dataloader, meters, all_scans_in_dict):
+def validate_epoch(epoch, trainer, val_dataloader, meters):
     
     if not args.debug:
         from jaclearn.visualize.html_table import HTMLTableVisualizer, HTMLTableColumnDesc

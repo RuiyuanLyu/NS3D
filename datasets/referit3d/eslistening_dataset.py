@@ -157,7 +157,7 @@ import json
 
 
 class ESListeningDataset(Dataset):
-    def __init__(self, es_info_file, vg_raw_data_file, processed_scan_dir, vocab, object_transformation=None,):
+    def __init__(self, args, es_info_file, vg_raw_data_file, processed_scan_dir, vocab, object_transformation=None,):
         super().__init__()
         self.es_info = read_annotation_pickles(es_info_file)
         self.class_to_idx = np.load(es_info_file, allow_pickle=True)["metainfo"]["categories"]
@@ -181,6 +181,11 @@ class ESListeningDataset(Dataset):
         self.scan_dir = processed_scan_dir
         self.vocab = vocab
         self.object_transformation = object_transformation
+        self.scan_gt_pcd_data = {}
+        self.include_anchors = True
+        self.max_distractors = 9
+        self.max_context_size = self.max_distractors + 1
+        self.max_seq_len = 50
         self.process_vg_raw_data()
 
     def process_vg_raw_data(self):
@@ -188,16 +193,18 @@ class ESListeningDataset(Dataset):
         for i, item in enumerate(self.vg_raw_data):
             item_id = f"esvg_{i}"
             scan_id = item['scan_id']
+            if not self.get_scan_gt_pcd_data(scan_id):
+                continue
             obj_id_list = [int(x) for x in self.es_info[scan_id]['object_ids']] 
             txt = item['text']
-            txt_ids = self.vocab.encode(txt) # TODO: get the vocab
+            tokens = np.array(self.vocab.encode(txt, self.max_seq_len), dtype=np.long)
             try:
                 tgt_obj_id = item['target_id']
-                tgt_obj_idx = int(tgt_obj_id[0]) if isinstance(tgt_obj_idx, list) else tgt_obj_idx
-                tgt_obj_idx = obj_id_list.index(tgt_obj_idx)
+                tgt_obj_id = int(tgt_obj_id[0]) if isinstance(tgt_obj_id, list) else tgt_obj_id
+                tgt_obj_idx = obj_id_list.index(tgt_obj_id)
             except Exception as e:
                 print(e)
-                print(item)
+                print(f"tgt_obj_id: {tgt_obj_id}")
                 continue
             target_type = self.es_info[scan_id]['object_types'][tgt_obj_idx]
             distractor_ids = item['distractor_ids']
@@ -206,7 +213,12 @@ class ESListeningDataset(Dataset):
             num_distractors = len(distractor_ids)
             num_objs = num_distractors + 1
             anchor_ids = item['anchors']
-            anchor_ids = [int(x) for x in anchor_ids]
+            try:
+                anchor_ids = [int(x) for x in anchor_ids]
+            except Exception as e:
+                print(e)
+                print(f"anchor_ids: {anchor_ids}")
+                continue
             anchor_idx = [obj_id_list.index(x) for x in anchor_ids]
             stimulus_id = f"{scan_id}-{target_type}-{num_objs}-{tgt_obj_idx}"
             for i in range(num_distractors):
@@ -216,13 +228,14 @@ class ESListeningDataset(Dataset):
                 "scan_id": scan_id,
                 "target_idx": tgt_obj_idx,
                 "utterance": txt,
-                "tokens": txt_ids,
+                "tokens": tokens,
                 "is_nr3d": False,
                 "anchor_idx": anchor_idx,
                 "stimulus_id": stimulus_id,
             }
             self.vg_data.append(vg_item)
         del self.vg_raw_data
+        print(f"num samples: {len(self.vg_data)}")
 
     def __len__(self):
         return len(self.vg_data)
@@ -273,6 +286,7 @@ class ESListeningDataset(Dataset):
         pcd_data_path = os.path.join(self.scan_dir, 'pcd_with_global_alignment', f'{scan_id}.pth')
         if not os.path.exists(pcd_data_path):
             print(f"Error: {pcd_data_path} does not exist.")
+            self.scan_gt_pcd_data[scan_id] = None
             return None
         data = torch.load(pcd_data_path)
         pc, colors, label, instance_ids = data
@@ -292,9 +306,11 @@ class ESListeningDataset(Dataset):
         """
         pcd_data, obj_pcds = self.get_scan_gt_pcd_data(scan_id)
         obj_pcd = obj_pcds[obj_idx]
-        n_points = self.num_points
-        pcd_idxs = np.random.choice(len(obj_pcd), size=self.num_points, replace=(len(obj_pcd) < self.num_points))
-        sample = obj_pcd[pcd_idxs]
+        if len(obj_pcd) > 0:
+            pcd_idxs = np.random.choice(len(obj_pcd), size=self.num_points, replace=(len(obj_pcd) < self.num_points))
+            sample = obj_pcd[pcd_idxs]
+        else:
+            sample = np.zeros((self.num_points, 6))
         return sample
 
     def __getitem__(self, index):
@@ -324,9 +340,8 @@ class ESListeningDataset(Dataset):
 
         if self.object_transformation is not None:
             sample_pcds = self.object_transformation(sample_pcds)
-            # TODO: implement this transformation
 
-        res['context_size'] = len(context_idxs)
+        res['context_size'] = len(sample_pcds)
 
         # take care of padding, so that a batch has same number of N-objects across scans.
         res['objects'] = pad_samples(sample_pcds, self.max_context_size)
@@ -360,7 +375,11 @@ class ESListeningDataset(Dataset):
         #     res['distrators_pos'] = distrators_pos
         #     res['object_ids'] = object_ids
         #     res['target_object_id'] = target.object_id
-
+        for k, v in res.items():
+            if hasattr(v, "shape"):
+                print(f"{k}: shape {v.shape}")
+            else:
+                print(f"{k}: {v}")
         return res
 
 
@@ -413,6 +432,7 @@ def make_data_loaders(args, vocab, mean_rgb,
         #                            object_transformation=object_transformation,
         #                            visualization=args.mode == 'evaluate')
         dataset = ESListeningDataset(
+            args=args,
             es_info_file=es_info_file,
             vg_raw_data_file=vg_raw_data_file,
             processed_scan_dir=processed_scan_dir,
