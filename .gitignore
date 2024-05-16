@@ -99,3 +99,6 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+temp_files/
+api_keys/
